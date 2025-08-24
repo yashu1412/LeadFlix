@@ -16,9 +16,9 @@ const PORT = process.env.PORT || 5000
 // Middleware
 app.use(
   cors({
-    origin: true, // Allow all origins - fixes Vercel deployment issue
-    credentials: true,
-  }),
+    origin: process.env.FRONTEND_URL || "http://localhost:3000", // 👈 Set frontend URL
+    credentials: true, // allow cookies
+  })
 )
 app.use(express.json())
 app.use(cookieParser())
@@ -29,8 +29,8 @@ mongoose
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
-  .then(() => console.log("MongoDB connected successfully"))
-  .catch((err) => console.error("MongoDB connection error:", err))
+  .then(() => console.log("✅ MongoDB connected"))
+  .catch((err) => console.error("❌ MongoDB error:", err))
 
 // Routes
 app.use("/api/auth", authRoutes)
@@ -38,15 +38,15 @@ app.use("/api/leads", leadRoutes)
 
 // Root route
 app.get("/", (req, res) => {
-  res.status(200).json({ 
-    message: "LeadFlix Backend API", 
+  res.status(200).json({
+    message: "LeadFlix Backend API",
     version: "1.0.0",
     status: "running",
     timestamp: new Date().toISOString(),
     endpoints: {
       auth: "/api/auth",
-      leads: "/api/leads"
-    }
+      leads: "/api/leads",
+    },
   })
 })
 
@@ -67,7 +67,7 @@ app.use("*", (req, res) => {
 })
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`)
+  console.log(`🚀 Server running on port ${PORT}`)
 })
 
 module.exports = app

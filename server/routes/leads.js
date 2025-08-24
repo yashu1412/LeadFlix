@@ -1,165 +1,149 @@
-const express = require("express")
-const Lead = require("../models/Lead")
-const authMiddleware = require("../middleware/auth")
+const express = require("express");
+const Lead = require("../models/Lead");
+const authMiddleware = require("../middleware/auth");
 
-const router = express.Router()
+const router = express.Router();
 
 // Apply auth middleware to all routes
-router.use(authMiddleware)
+router.use(authMiddleware);
 
-// Helper function to build MongoDB query from filters
+// Enum validation constants
+const VALID_SOURCES = ["website", "facebook_ads", "google_ads", "referral", "events", "other"];
+const VALID_STATUSES = ["new", "contacted", "qualified", "lost", "won"];
+
+// ------------------------
+// Helper: Build filter query
+// ------------------------
 const buildFilterQuery = (filters, userId) => {
-  const query = { userId }
+  const query = { userId };
 
-  if (!filters) return query
+  if (!filters) return query;
 
-  // String field filters (email, company, city)
-  const stringFields = ["email", "company", "city"]
-  stringFields.forEach((field) => {
+  // String filters
+  ["email", "company", "city"].forEach((field) => {
     if (filters[field]) {
-      const filter = filters[field]
-      if (filter.equals) {
-        query[field] = filter.equals
-      } else if (filter.contains) {
-        query[field] = { $regex: filter.contains, $options: "i" }
+      const { equals, contains } = filters[field];
+      if (equals) query[field] = equals;
+      if (contains) query[field] = { $regex: contains, $options: "i" };
+    }
+  });
+
+  // Enum filters
+  ["status", "source"].forEach((field) => {
+    if (filters[field]) {
+      const { equals, in: inArr } = filters[field];
+      if (equals) query[field] = equals;
+      if (Array.isArray(inArr)) query[field] = { $in: inArr };
+    }
+  });
+
+  // Number filters
+  ["score", "leadValue"].forEach((field) => {
+    if (filters[field]) {
+      const { equals, gt, lt, between } = filters[field];
+      if (equals !== undefined) query[field] = equals;
+      else {
+        const conditions = {};
+        if (gt !== undefined) conditions.$gt = gt;
+        if (lt !== undefined) conditions.$lt = lt;
+        if (Array.isArray(between) && between.length === 2) {
+          conditions.$gte = between[0];
+          conditions.$lte = between[1];
+        }
+        if (Object.keys(conditions).length) query[field] = conditions;
       }
     }
-  })
+  });
 
-  // Enum field filters (status, source)
-  const enumFields = ["status", "source"]
-  enumFields.forEach((field) => {
+  // Date filters
+  ["createdAt", "lastActivityAt"].forEach((field) => {
     if (filters[field]) {
-      const filter = filters[field]
-      if (filter.equals) {
-        query[field] = filter.equals
-      } else if (filter.in && Array.isArray(filter.in)) {
-        query[field] = { $in: filter.in }
-      }
-    }
-  })
+      const { on, before, after, between } = filters[field];
+      const conditions = {};
 
-  // Number field filters (score, leadValue)
-  const numberFields = ["score", "leadValue"]
-  numberFields.forEach((field) => {
-    if (filters[field]) {
-      const filter = filters[field]
-      if (filter.equals !== undefined) {
-        query[field] = filter.equals
+      if (on) {
+        const date = new Date(on);
+        if (!isNaN(date)) {
+          const nextDay = new Date(date);
+          nextDay.setDate(date.getDate() + 1);
+          query[field] = { $gte: date, $lt: nextDay };
+        }
       } else {
-        const conditions = {}
-        if (filter.gt !== undefined) conditions.$gt = filter.gt
-        if (filter.lt !== undefined) conditions.$lt = filter.lt
-        if (filter.between && Array.isArray(filter.between) && filter.between.length === 2) {
-          conditions.$gte = filter.between[0]
-          conditions.$lte = filter.between[1]
+        if (before && !isNaN(new Date(before))) conditions.$lt = new Date(before);
+        if (after && !isNaN(new Date(after))) conditions.$gt = new Date(after);
+        if (Array.isArray(between) && between.length === 2) {
+          const [start, end] = between.map((d) => new Date(d));
+          if (!isNaN(start) && !isNaN(end)) {
+            conditions.$gte = start;
+            conditions.$lte = end;
+          }
         }
-        if (Object.keys(conditions).length > 0) {
-          query[field] = conditions
-        }
+        if (Object.keys(conditions).length) query[field] = conditions;
       }
     }
-  })
+  });
 
-  // Date field filters (createdAt, lastActivityAt)
-  const dateFields = [
-    { filter: "createdAt", db: "createdAt" },
-    { filter: "lastActivityAt", db: "lastActivityAt" },
-  ]
-  dateFields.forEach(({ filter: filterField, db: dbField }) => {
-    if (filters[filterField]) {
-      const filter = filters[filterField]
-      if (filter.on) {
-        const date = new Date(filter.on)
-        const nextDay = new Date(date)
-        nextDay.setDate(date.getDate() + 1)
-        query[dbField] = { $gte: date, $lt: nextDay }
-      } else {
-        const conditions = {}
-        if (filter.before) conditions.$lt = new Date(filter.before)
-        if (filter.after) conditions.$gt = new Date(filter.after)
-        if (filter.between && Array.isArray(filter.between) && filter.between.length === 2) {
-          conditions.$gte = new Date(filter.between[0])
-          conditions.$lte = new Date(filter.between[1])
-        }
-        if (Object.keys(conditions).length > 0) {
-          query[dbField] = conditions
-        }
-      }
-    }
-  })
-
-  // Boolean field filters (isQualified)
+  // Boolean filters
   if (filters.isQualified && filters.isQualified.equals !== undefined) {
-    query.isQualified = filters.isQualified.equals
+    query.isQualified = filters.isQualified.equals === true || filters.isQualified.equals === "true";
   }
 
-  return query
-}
+  return query;
+};
 
-// GET /leads - List leads with pagination and filtering
+// ------------------------
+// GET /leads (list with filters + pagination)
+// ------------------------
 router.get("/", async (req, res) => {
   try {
-    const page = Math.max(1, Number.parseInt(req.query.page) || 1)
-    const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit) || 20))
-    const skip = (page - 1) * limit
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const skip = (page - 1) * limit;
 
-    // Parse filters from query string
-    let filters = {}
+    let filters = {};
     if (req.query.filters) {
       try {
-        filters = JSON.parse(req.query.filters)
-      } catch (error) {
-        return res.status(400).json({ message: "Invalid filters format" })
+        filters = JSON.parse(req.query.filters);
+      } catch {
+        return res.status(400).json({ message: "Invalid filters format (must be JSON)" });
       }
     }
 
-    // Build query
-    const query = buildFilterQuery(filters, req.user._id)
+    const query = buildFilterQuery(filters, req.user._id);
+    const total = await Lead.countDocuments(query);
+    const totalPages = Math.ceil(total / limit);
 
-    // Get total count for pagination
-    const total = await Lead.countDocuments(query)
-    const totalPages = Math.ceil(total / limit)
+    const leads = await Lead.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
 
-    // Get leads with pagination
-    const leads = await Lead.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean()
-
-    res.status(200).json({
-      data: leads,
-      page,
-      limit,
-      total,
-      totalPages,
-    })
+    res.status(200).json({ data: leads, page, limit, total, totalPages });
   } catch (error) {
-    console.error("Get leads error:", error)
-    res.status(500).json({ message: "Server error while fetching leads" })
+    console.error("Get leads error:", error);
+    res.status(500).json({ message: "Server error while fetching leads" });
   }
-})
+});
 
-// GET /leads/:id - Get single lead
+// ------------------------
+// GET /leads/:id (single)
+// ------------------------
 router.get("/:id", async (req, res) => {
   try {
-    const lead = await Lead.findOne({
-      _id: req.params.id,
-      userId: req.user._id,
-    })
-
-    if (!lead) {
-      return res.status(404).json({ message: "Lead not found" })
-    }
-
-    res.status(200).json(lead)
+    const lead = await Lead.findOne({ _id: req.params.id, userId: req.user._id });
+    if (!lead) return res.status(404).json({ message: "Lead not found" });
+    res.status(200).json(lead);
   } catch (error) {
-    console.error("Get lead error:", error)
-    if (error.name === "CastError") {
-      return res.status(400).json({ message: "Invalid lead ID" })
-    }
-    res.status(500).json({ message: "Server error while fetching lead" })
+    console.error("Get lead error:", error);
+    if (error.name === "CastError") return res.status(400).json({ message: "Invalid lead ID" });
+    res.status(500).json({ message: "Server error while fetching lead" });
   }
-})
+});
 
-// POST /leads - Create new lead
+// ------------------------
+// POST /leads (create)
+// ------------------------
 router.post("/", async (req, res) => {
   try {
     const {
@@ -176,52 +160,33 @@ router.post("/", async (req, res) => {
       leadValue = 0,
       lastActivityAt,
       isQualified = false,
-    } = req.body
+    } = req.body;
 
-    // Validation
-    const requiredFields = ["firstName", "lastName", "email", "phone", "company", "city", "state", "source"]
-    const missingFields = requiredFields.filter((field) => !req.body[field])
-
-    if (missingFields.length > 0) {
-      return res.status(400).json({
-        message: `Missing required fields: ${missingFields.join(", ")}`,
-      })
+    const requiredFields = ["firstName", "lastName", "email", "phone", "company", "city", "state", "source"];
+    const missing = requiredFields.filter((f) => !req.body[f]);
+    if (missing.length) {
+      return res.status(400).json({ message: `Missing required fields: ${missing.join(", ")}` });
     }
 
-    // Validate enums
-    const validSources = ["website", "facebook_ads", "google_ads", "referral", "events", "other"]
-    const validStatuses = ["new", "contacted", "qualified", "lost", "won"]
-
-    if (!validSources.includes(source)) {
-      return res.status(400).json({ message: "Invalid source value" })
+    if (!VALID_SOURCES.includes(source)) {
+      return res.status(400).json({ message: "Invalid source value" });
     }
-
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ message: "Invalid status value" })
+    if (!VALID_STATUSES.includes(status)) {
+      return res.status(400).json({ message: "Invalid status value" });
     }
-
-    // Validate score range
     if (score < 0 || score > 100) {
-      return res.status(400).json({ message: "Score must be between 0 and 100" })
+      return res.status(400).json({ message: "Score must be between 0 and 100" });
     }
-
-    // Validate leadValue
     if (leadValue < 0) {
-      return res.status(400).json({ message: "Lead value must be non-negative" })
+      return res.status(400).json({ message: "Lead value must be non-negative" });
     }
 
-    // Check for duplicate email
-    const existingLead = await Lead.findOne({
-      email: email.toLowerCase(),
-      userId: req.user._id,
-    })
-
+    const existingLead = await Lead.findOne({ email: email.toLowerCase(), userId: req.user._id });
     if (existingLead) {
-      return res.status(400).json({ message: "Lead with this email already exists" })
+      return res.status(400).json({ message: "Lead with this email already exists" });
     }
 
-    // Create lead
-    const leadData = {
+    const lead = new Lead({
       firstName,
       lastName,
       email: email.toLowerCase(),
@@ -235,148 +200,75 @@ router.post("/", async (req, res) => {
       leadValue,
       isQualified,
       userId: req.user._id,
-    }
+      ...(lastActivityAt && { lastActivityAt: new Date(lastActivityAt) }),
+    });
 
-    if (lastActivityAt) {
-      leadData.lastActivityAt = new Date(lastActivityAt)
-    }
-
-    const lead = new Lead(leadData)
-    await lead.save()
-
-    res.status(201).json(lead)
+    await lead.save();
+    res.status(201).json(lead);
   } catch (error) {
-    console.error("Create lead error:", error)
-    if (error.code === 11000) {
-      return res.status(400).json({ message: "Lead with this email already exists" })
-    }
-    res.status(500).json({ message: "Server error while creating lead" })
+    console.error("Create lead error:", error);
+    if (error.code === 11000) return res.status(400).json({ message: "Lead with this email already exists" });
+    res.status(500).json({ message: "Server error while creating lead" });
   }
-})
+});
 
-// PUT /leads/:id - Update lead
+// ------------------------
+// PUT /leads/:id (update)
+// ------------------------
 router.put("/:id", async (req, res) => {
   try {
-    const {
-      firstName,
-      lastName,
-      email,
-      phone,
-      company,
-      city,
-      state,
-      source,
-      status,
-      score,
-      leadValue,
-      lastActivityAt,
-      isQualified,
-    } = req.body
+    const lead = await Lead.findOne({ _id: req.params.id, userId: req.user._id });
+    if (!lead) return res.status(404).json({ message: "Lead not found" });
 
-    // Find lead
-    const lead = await Lead.findOne({
-      _id: req.params.id,
-      userId: req.user._id,
-    })
+    const { source, status, score, leadValue, email } = req.body;
 
-    if (!lead) {
-      return res.status(404).json({ message: "Lead not found" })
+    if (source && !VALID_SOURCES.includes(source)) {
+      return res.status(400).json({ message: "Invalid source value" });
     }
-
-    // Validate enums if provided
-    if (source) {
-      const validSources = ["website", "facebook_ads", "google_ads", "referral", "events", "other"]
-      if (!validSources.includes(source)) {
-        return res.status(400).json({ message: "Invalid source value" })
-      }
+    if (status && !VALID_STATUSES.includes(status)) {
+      return res.status(400).json({ message: "Invalid status value" });
     }
-
-    if (status) {
-      const validStatuses = ["new", "contacted", "qualified", "lost", "won"]
-      if (!validStatuses.includes(status)) {
-        return res.status(400).json({ message: "Invalid status value" })
-      }
-    }
-
-    // Validate score if provided
     if (score !== undefined && (score < 0 || score > 100)) {
-      return res.status(400).json({ message: "Score must be between 0 and 100" })
+      return res.status(400).json({ message: "Score must be between 0 and 100" });
     }
-
-    // Validate leadValue if provided
     if (leadValue !== undefined && leadValue < 0) {
-      return res.status(400).json({ message: "Lead value must be non-negative" })
+      return res.status(400).json({ message: "Lead value must be non-negative" });
     }
 
-    // Check for duplicate email if email is being changed
     if (email && email.toLowerCase() !== lead.email) {
-      const existingLead = await Lead.findOne({
-        email: email.toLowerCase(),
-        userId: req.user._id,
-        _id: { $ne: lead._id },
-      })
-
-      if (existingLead) {
-        return res.status(400).json({ message: "Lead with this email already exists" })
-      }
+      const existing = await Lead.findOne({ email: email.toLowerCase(), userId: req.user._id, _id: { $ne: lead._id } });
+      if (existing) return res.status(400).json({ message: "Lead with this email already exists" });
     }
 
-    // Update fields
-    const updateData = {}
-    if (firstName !== undefined) updateData.firstName = firstName
-    if (lastName !== undefined) updateData.lastName = lastName
-    if (email !== undefined) updateData.email = email.toLowerCase()
-    if (phone !== undefined) updateData.phone = phone
-    if (company !== undefined) updateData.company = company
-    if (city !== undefined) updateData.city = city
-    if (state !== undefined) updateData.state = state
-    if (source !== undefined) updateData.source = source
-    if (status !== undefined) updateData.status = status
-    if (score !== undefined) updateData.score = score
-    if (leadValue !== undefined) updateData.leadValue = leadValue
-    if (isQualified !== undefined) updateData.isQualified = isQualified
-    if (lastActivityAt !== undefined) {
-      updateData.lastActivityAt = lastActivityAt ? new Date(lastActivityAt) : null
-    }
+    Object.assign(lead, {
+      ...req.body,
+      ...(email && { email: email.toLowerCase() }),
+      ...(req.body.lastActivityAt !== undefined && { lastActivityAt: req.body.lastActivityAt ? new Date(req.body.lastActivityAt) : null }),
+    });
 
-    const updatedLead = await Lead.findByIdAndUpdate(lead._id, updateData, {
-      new: true,
-      runValidators: true,
-    })
-
-    res.status(200).json(updatedLead)
+    await lead.save();
+    res.status(200).json(lead);
   } catch (error) {
-    console.error("Update lead error:", error)
-    if (error.name === "CastError") {
-      return res.status(400).json({ message: "Invalid lead ID" })
-    }
-    if (error.code === 11000) {
-      return res.status(400).json({ message: "Lead with this email already exists" })
-    }
-    res.status(500).json({ message: "Server error while updating lead" })
+    console.error("Update lead error:", error);
+    if (error.name === "CastError") return res.status(400).json({ message: "Invalid lead ID" });
+    if (error.code === 11000) return res.status(400).json({ message: "Lead with this email already exists" });
+    res.status(500).json({ message: "Server error while updating lead" });
   }
-})
+});
 
-// DELETE /leads/:id - Delete lead
+// ------------------------
+// DELETE /leads/:id
+// ------------------------
 router.delete("/:id", async (req, res) => {
   try {
-    const lead = await Lead.findOneAndDelete({
-      _id: req.params.id,
-      userId: req.user._id,
-    })
-
-    if (!lead) {
-      return res.status(404).json({ message: "Lead not found" })
-    }
-
-    res.status(200).json({ message: "Lead deleted successfully" })
+    const lead = await Lead.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
+    if (!lead) return res.status(404).json({ message: "Lead not found" });
+    res.status(200).json({ message: "Lead deleted successfully" });
   } catch (error) {
-    console.error("Delete lead error:", error)
-    if (error.name === "CastError") {
-      return res.status(400).json({ message: "Invalid lead ID" })
-    }
-    res.status(500).json({ message: "Server error while deleting lead" })
+    console.error("Delete lead error:", error);
+    if (error.name === "CastError") return res.status(400).json({ message: "Invalid lead ID" });
+    res.status(500).json({ message: "Server error while deleting lead" });
   }
-})
+});
 
-module.exports = router
+module.exports = router;
