@@ -16,8 +16,8 @@ const PORT = process.env.PORT || 5000
 // Middleware
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "https://lead-flix-topaz.vercel.app", // 👈 Set frontend URL
-    credentials: true, // allow cookies
+    origin: true, // ✅ allows all origins dynamically
+    credentials: true, // ✅ allows cookies
   })
 )
 app.use(express.json())
