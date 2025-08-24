@@ -29,7 +29,7 @@ app.use(cookieParser())
 
 // MongoDB connection
 mongoose
-  .connect(process.env.MONGODB_URI || "mongodb://localhost:27017/lead-management", {
+  .connect(process.env.MONGODB_URI || "mongodb+srv://yashpalsinghpawara:70CBoFDoR3KqZSMI@cluster0.pfzz2zx.mongodb.net/Demoproject", {
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
