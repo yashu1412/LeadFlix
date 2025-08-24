@@ -6,6 +6,7 @@ export interface User {
   email: string
   firstName: string
   lastName: string
+  token?: string // optional if you store JWT
 }
 
 interface AuthStore {
@@ -17,38 +18,17 @@ interface AuthStore {
 
 export const useAuthStore = create<AuthStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       user: null,
       isAuthenticated: false,
-      setUser: (user) => {
-        console.log('Auth Store: setUser called with:', user)
-        const isAuth = !!user
-        console.log('Auth Store: Setting isAuthenticated to:', isAuth)
-        
-        set({ user, isAuthenticated: isAuth })
-        
-        // Verify the state was set correctly
-        setTimeout(() => {
-          const currentState = get()
-          console.log('Auth Store: State after setUser:', currentState)
-        }, 50)
-      },
-      clearUser: () => {
-        console.log('Auth Store: clearUser called')
-        set({ user: null, isAuthenticated: false })
-        
-        // Verify the state was cleared correctly
-        setTimeout(() => {
-          const currentState = get()
-          console.log('Auth Store: State after clearUser:', currentState)
-        }, 50)
-      },
+      setUser: (user) => set({ user, isAuthenticated: !!user }),
+      clearUser: () => set({ user: null, isAuthenticated: false }),
     }),
     {
-      name: 'leadflix-auth',
+      name: 'leadflix-auth', // key in localStorage
       partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
       onRehydrateStorage: () => (state) => {
-        console.log('Auth Store: Rehydrating from storage, state:', state)
+        console.log('Auth Store: Rehydrated from localStorage:', state)
       },
     }
   )
