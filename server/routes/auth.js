@@ -14,17 +14,6 @@ const generateToken = (userId) => {
   );
 };
 
-// Detect env
-const isProduction = process.env.NODE_ENV === "production";
-
-// Common cookie options
-const cookieOptions = {
-  httpOnly: true,
-  secure: isProduction,                       // ✅ only secure in prod
-  sameSite: isProduction ? "None" : "Lax",    // ✅ allow cross-site in prod, local works with Lax
-  maxAge: 7 * 24 * 60 * 60 * 1000,            // 7 days
-};
-
 // =============================
 // Register
 // =============================
@@ -46,11 +35,10 @@ router.post("/register", async (req, res) => {
     }
 
     const user = new User({ email, password, firstName, lastName });
-    await user.save();
-
     const token = generateToken(user._id);
 
-    res.cookie("token", token, cookieOptions);
+    user.token = token; // store JWT in DB
+    await user.save();
 
     res.status(201).json({
       message: "User registered successfully",
@@ -59,6 +47,7 @@ router.post("/register", async (req, res) => {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
+        token: user.token, // return token in response
       },
     });
   } catch (error) {
@@ -79,18 +68,14 @@ router.post("/login", async (req, res) => {
     }
 
     const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(401).json({ message: "Invalid credentials" });
-    }
+    if (!user) return res.status(401).json({ message: "Invalid credentials" });
 
     const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({ message: "Invalid credentials" });
-    }
+    if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
 
     const token = generateToken(user._id);
-
-    res.cookie("token", token, cookieOptions);
+    user.token = token; // update token in DB
+    await user.save();
 
     res.status(200).json({
       message: "Login successful",
@@ -99,6 +84,7 @@ router.post("/login", async (req, res) => {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
+        token: user.token, // return token in response
       },
     });
   } catch (error) {
@@ -110,9 +96,15 @@ router.post("/login", async (req, res) => {
 // =============================
 // Logout
 // =============================
-router.post("/logout", (req, res) => {
-  res.clearCookie("token", cookieOptions);
-  res.status(200).json({ message: "Logout successful" });
+router.post("/logout", authMiddleware, async (req, res) => {
+  try {
+    req.user.token = null; // remove token from DB
+    await req.user.save();
+    res.status(200).json({ message: "Logout successful" });
+  } catch (error) {
+    console.error("Logout error:", error);
+    res.status(500).json({ message: "Server error during logout" });
+  }
 });
 
 // =============================
