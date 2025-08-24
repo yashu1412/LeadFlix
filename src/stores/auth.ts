@@ -25,7 +25,15 @@ export const useAuthStore = create<AuthStore>()(
         const isAuth = !!user
         console.log('Auth Store: Setting isAuthenticated to:', isAuth)
         
+        // Set state immediately
         set({ user, isAuthenticated: isAuth })
+        
+        // Force persist to localStorage manually
+        if (user) {
+          const stateToPersist = { user, isAuthenticated: isAuth }
+          localStorage.setItem('leadflix-auth', JSON.stringify(stateToPersist))
+          console.log('Auth Store: Manually persisted state to localStorage:', stateToPersist)
+        }
         
         // Verify the state was set correctly
         setTimeout(() => {
@@ -36,6 +44,10 @@ export const useAuthStore = create<AuthStore>()(
       clearUser: () => {
         console.log('Auth Store: clearUser called')
         set({ user: null, isAuthenticated: false })
+        
+        // Clear localStorage manually
+        localStorage.removeItem('leadflix-auth')
+        console.log('Auth Store: Manually cleared localStorage')
         
         // Verify the state was cleared correctly
         setTimeout(() => {
@@ -50,18 +62,17 @@ export const useAuthStore = create<AuthStore>()(
       onRehydrateStorage: () => (state) => {
         console.log('Auth Store: Rehydrating from storage, state:', state)
         
-        // CRITICAL FIX: Don't rehydrate if we already have valid auth state
-        const currentState = get()
-        if (currentState.user && currentState.isAuthenticated) {
-          console.log('Auth Store: SKIPPING rehydration - user already authenticated!')
-          return // Don't override existing auth state
-        }
+        // Check what's actually in localStorage
+        const storedData = localStorage.getItem('leadflix-auth')
+        console.log('Auth Store: Raw localStorage data:', storedData)
         
-        // Only rehydrate if we don't have valid auth state
-        if (state && state.user && state.isAuthenticated) {
-          console.log('Auth Store: Rehydrating valid state from storage')
-        } else {
-          console.log('Auth Store: No valid state to rehydrate, keeping current state')
+        if (storedData) {
+          try {
+            const parsed = JSON.parse(storedData)
+            console.log('Auth Store: Parsed localStorage data:', parsed)
+          } catch (e) {
+            console.error('Auth Store: Error parsing localStorage data:', e)
+          }
         }
       },
     }
