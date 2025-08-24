@@ -13,8 +13,8 @@ export function ProtectedRoute({ children, requireAuth = true }: ProtectedRouteP
 
   // If authentication is required and user is not authenticated
   if (requireAuth && !isAuthenticated) {
-    // Redirect to unauthorized page with the attempted location
-    return <Navigate to="/unauthorized" state={{ from: location }} replace />
+    // Redirect to auth page instead of unauthorized
+    return <Navigate to="/auth" state={{ from: location }} replace />
   }
 
   // If authentication is NOT required and user IS authenticated

@@ -37,15 +37,44 @@ export function AuthPage() {
   const loginMutation = useMutation({
     mutationFn: authApi.login,
     onSuccess: (data) => {
+      console.log('Login Success - API Response:', data)
+      console.log('Login Success - User Data:', data.user)
+      
       setUser(data.user)
+      console.log('Login Success - After setUser call')
+      
       toast({
         title: 'Welcome back!',
         description: `Successfully signed in as ${data.user.firstName}`,
         variant: 'success',
       })
-      navigate('/dashboard')
+      
+      // Fix: Add longer delay and check state before navigation
+      setTimeout(() => {
+        console.log('Login Success - About to navigate, checking auth state...')
+        const authStore = useAuthStore.getState()
+        console.log('Login Success - Current auth state:', authStore)
+        
+        if (authStore.isAuthenticated && authStore.user) {
+          console.log('Login Success - Navigation proceeding...')
+          navigate('/dashboard')
+        } else {
+          console.log('Login Success - Auth state not ready, retrying...')
+          // Retry after another delay
+          setTimeout(() => {
+            const retryState = useAuthStore.getState()
+            console.log('Login Success - Retry auth state:', retryState)
+            if (retryState.isAuthenticated && retryState.user) {
+              navigate('/dashboard')
+            } else {
+              console.error('Login Success - Auth state still not ready!')
+            }
+          }, 200)
+        }
+      }, 200)
     },
     onError: (error: any) => {
+      console.error('Login Error:', error)
       toast({
         title: 'Sign In Failed',
         description: error.response?.data?.message || 'Please check your credentials and try again.',
@@ -63,7 +92,10 @@ export function AuthPage() {
         description: `Welcome to LeadFlix, ${data.user.firstName}!`,
         variant: 'success',
       })
-      navigate('/dashboard')
+      // Fix: Add small delay to ensure state is persisted before navigation
+      setTimeout(() => {
+        navigate('/dashboard')
+      }, 100)
     },
     onError: (error: any) => {
       toast({

@@ -11,9 +11,11 @@ const api = axios.create({
 // Request interceptor
 api.interceptors.request.use(
   (config) => {
+    console.log('Axios Request:', config.method?.toUpperCase(), config.url)
     return config
   },
   (error) => {
+    console.error('Axios Request Error:', error)
     return Promise.reject(error)
   }
 )
@@ -21,19 +23,24 @@ api.interceptors.request.use(
 // Response interceptor
 api.interceptors.response.use(
   (response) => {
+    console.log('Axios Response:', response.status, response.config.url)
     return response
   },
   (error) => {
-    if (error.response?.status === 401) {
-      // Clear any stored user data and redirect to unauthorized page
-      // Clear localStorage/auth state
+    console.log('Axios Error Response:', error.response?.status, error.config?.url)
+    
+    // Only handle 401 for non-auth endpoints and when not already on auth page
+    if (error.response?.status === 401 && 
+        !error.config.url?.includes('/auth') && 
+        window.location.pathname !== '/auth') {
+      
+      console.log('Axios: Handling 401 error, clearing auth state')
+      
+      // Clear auth state only for actual unauthorized requests
       localStorage.removeItem('leadflix-auth')
       
-      // Only redirect if not already on unauthorized page
-      if (window.location.pathname !== '/unauthorized') {
-        // Use replace to avoid adding to browser history
-        window.location.replace('/unauthorized')
-      }
+      // Redirect to auth page
+      window.location.replace('/auth')
     }
     return Promise.reject(error)
   }

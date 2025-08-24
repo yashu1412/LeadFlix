@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 5000
 // Middleware
 app.use(
   cors({
-    origin: true, 
+    origin: true, // Allow all origins - fixes Vercel deployment issue
     credentials: true,
   }),
 )
