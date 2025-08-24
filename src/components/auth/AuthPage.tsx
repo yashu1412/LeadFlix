@@ -40,38 +40,46 @@ export function AuthPage() {
       console.log('Login Success - API Response:', data)
       console.log('Login Success - User Data:', data.user)
       
+      // Set user in auth store
       setUser(data.user)
       console.log('Login Success - After setUser call')
+      
+      // Force a small delay and then check state
+      setTimeout(() => {
+        console.log('Login Success - Checking auth state after delay...')
+        const authStore = useAuthStore.getState()
+        console.log('Login Success - Current auth state:', authStore)
+        
+        // If state is still not ready, try setting it again
+        if (!authStore.isAuthenticated || !authStore.user) {
+          console.log('Login Success - State not ready, retrying setUser...')
+          setUser(data.user)
+          
+          // Wait a bit more and check again
+          setTimeout(() => {
+            const retryState = useAuthStore.getState()
+            console.log('Login Success - Retry auth state:', retryState)
+            
+            if (retryState.isAuthenticated && retryState.user) {
+              console.log('Login Success - State ready, navigating...')
+              navigate('/dashboard')
+            } else {
+              console.error('Login Success - State still not ready after retry!')
+              // Force navigation anyway
+              navigate('/dashboard')
+            }
+          }, 300)
+        } else {
+          console.log('Login Success - State ready, navigating...')
+          navigate('/dashboard')
+        }
+      }, 200)
       
       toast({
         title: 'Welcome back!',
         description: `Successfully signed in as ${data.user.firstName}`,
         variant: 'success',
       })
-      
-      // Fix: Add longer delay and check state before navigation
-      setTimeout(() => {
-        console.log('Login Success - About to navigate, checking auth state...')
-        const authStore = useAuthStore.getState()
-        console.log('Login Success - Current auth state:', authStore)
-        
-        if (authStore.isAuthenticated && authStore.user) {
-          console.log('Login Success - Navigation proceeding...')
-          navigate('/dashboard')
-        } else {
-          console.log('Login Success - Auth state not ready, retrying...')
-          // Retry after another delay
-          setTimeout(() => {
-            const retryState = useAuthStore.getState()
-            console.log('Login Success - Retry auth state:', retryState)
-            if (retryState.isAuthenticated && retryState.user) {
-              navigate('/dashboard')
-            } else {
-              console.error('Login Success - Auth state still not ready!')
-            }
-          }, 200)
-        }
-      }, 200)
     },
     onError: (error: any) => {
       console.error('Login Error:', error)
