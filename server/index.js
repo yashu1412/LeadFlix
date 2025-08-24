@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 5000
 // Middleware
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "https://lead-flix.vercel.app", // Vite's default port
+    origin: process.env.FRONTEND_URL || "https://lead-flix-ea1i.vercel.app/", // Vite's default port
     credentials: true,
   }),
 )
