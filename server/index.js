@@ -39,7 +39,6 @@ app.get("/", (req, res) => {
     docs: {
       auth: "/api/auth",
       leads: "/api/leads",
-      health: "/api/health",
     },
   })
 })
