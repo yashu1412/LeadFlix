@@ -25,6 +25,10 @@ const userSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    token: {
+      type: String, // <-- store JWT token here
+      default: null,
+    },
   },
   {
     timestamps: true,
