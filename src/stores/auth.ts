@@ -49,6 +49,20 @@ export const useAuthStore = create<AuthStore>()(
       partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
       onRehydrateStorage: () => (state) => {
         console.log('Auth Store: Rehydrating from storage, state:', state)
+        
+        // CRITICAL FIX: Don't rehydrate if we already have valid auth state
+        const currentState = get()
+        if (currentState.user && currentState.isAuthenticated) {
+          console.log('Auth Store: SKIPPING rehydration - user already authenticated!')
+          return // Don't override existing auth state
+        }
+        
+        // Only rehydrate if we don't have valid auth state
+        if (state && state.user && state.isAuthenticated) {
+          console.log('Auth Store: Rehydrating valid state from storage')
+        } else {
+          console.log('Auth Store: No valid state to rehydrate, keeping current state')
+        }
       },
     }
   )
