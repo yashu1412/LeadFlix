@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 5000
 // Middleware
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "https://lead-flix-ea1i.vercel.app/", // Vite's default port
+    origin: true, 
     credentials: true,
   }),
 )
@@ -25,7 +25,7 @@ app.use(cookieParser())
 
 // MongoDB connection
 mongoose
-  .connect(process.env.MONGODB_URI || "mongodb+srv://yashpalsinghpawara:70CBoFDoR3KqZSMI@cluster0.pfzz2zx.mongodb.net/Demoproject", {
+  .connect(process.env.MONGODB_URI || "mongodb://localhost:27017/lead-management", {
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
@@ -35,6 +35,20 @@ mongoose
 // Routes
 app.use("/api/auth", authRoutes)
 app.use("/api/leads", leadRoutes)
+
+// Root route
+app.get("/", (req, res) => {
+  res.status(200).json({ 
+    message: "LeadFlix Backend API", 
+    version: "1.0.0",
+    status: "running",
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      auth: "/api/auth",
+      leads: "/api/leads"
+    }
+  })
+})
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {
