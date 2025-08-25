@@ -1,17 +1,129 @@
+// AuthPage.tsx
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
+import axios from 'axios'
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/useToast'
-import { authApi } from '@/api/auth'
-import { useAuthStore } from '@/stores/auth'
 import { Layout } from '@/components/layout/Layout'
 
+/* ------------------------- API CONFIG ------------------------- */
+const api = axios.create({
+  baseURL: 'https://leadflix.onrender.com/api/auth',
+})
+
+export interface RegisterData {
+  email: string
+  password: string
+  firstName: string
+  lastName: string
+}
+
+export interface LoginData {
+  email: string
+  password: string
+}
+
+export interface User {
+  id: string
+  email: string
+  firstName: string
+  lastName: string
+  token?: string
+}
+
+export interface AuthResponse {
+  message: string
+  user: User
+  token?: string
+}
+
+export const authApi = {
+  register: (data: RegisterData): Promise<AuthResponse> =>
+    api.post('/register', data).then(res => res.data),
+
+  login: (data: LoginData): Promise<AuthResponse> =>
+    api.post('/login', data).then(res => res.data),
+
+  logout: (): Promise<{ message: string }> =>
+    api.post('/logout').then(res => res.data),
+
+  me: (): Promise<{ user: User }> =>
+    api.get('/me').then(res => res.data),
+}
+
+/* ------------------------- ZUSTAND STORE ------------------------- */
+interface AuthStore {
+  user: User | null
+  token: string | null
+  isAuthenticated: boolean
+  rememberMe: boolean
+  setUser: (user: User | null, token?: string | null, rememberMe?: boolean) => void
+  clearUser: () => void
+}
+
+// Storage selector
+const storageType = (rememberMe?: boolean) =>
+  createJSONStorage(() => (rememberMe ? localStorage : sessionStorage))
+
+export const useAuthStore = create<AuthStore>()(
+  persist(
+    (set, get) => ({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      rememberMe: false,
+
+      setUser: (user, token, rememberMe = false) => {
+        console.log('Auth Store: setUser called with:', user, token, rememberMe)
+
+        set({
+          user,
+          token: token || get().token,
+          isAuthenticated: !!user && !!(token || get().token),
+          rememberMe,
+        })
+
+        // Dynamically update storage
+        useAuthStore.persist.setOptions({
+          storage: storageType(rememberMe),
+        })
+
+        // Force save into chosen storage
+        useAuthStore.persist.persist?.()
+      },
+
+      clearUser: () => {
+        console.log('Auth Store: clearUser called')
+        set({ user: null, token: null, isAuthenticated: false, rememberMe: false })
+
+        useAuthStore.persist.setOptions({
+          storage: storageType(false),
+        })
+
+        useAuthStore.persist.clearStorage?.()
+      },
+    }),
+    {
+      name: 'leadflix-auth',
+      storage: storageType(false), // default sessionStorage
+      partialize: (state) =>
+        state.rememberMe
+          ? { user: state.user, token: state.token, isAuthenticated: state.isAuthenticated, rememberMe: state.rememberMe }
+          : {},
+    }
+  )
+)
+
+/* ------------------------- AUTH PAGE ------------------------- */
 interface FormData {
   email: string
   password: string
@@ -37,111 +149,66 @@ export function AuthPage() {
   const loginMutation = useMutation({
     mutationFn: authApi.login,
     onSuccess: (data) => {
-      console.log('Login Success - API Response:', data)
-  
-      // ✅ use data.user.token instead of data.token
+      console.log('Login Success:', data)
       setUser(data.user, data.user.token, rememberMe)
-  
-      toast({
-        title: 'Welcome back!',
-        description: `Successfully signed in as ${data.user.firstName}`,
-        variant: 'success',
-      })
-  
+      toast({ title: 'Welcome back!', description: `Signed in as ${data.user.firstName}`, variant: 'success' })
       navigate('/dashboard')
     },
     onError: (error: any) => {
-      console.error('Login Error:', error)
       toast({
         title: 'Sign In Failed',
-        description: error.response?.data?.message || 'Please check your credentials and try again.',
+        description: error.response?.data?.message || 'Check your credentials and try again.',
         variant: 'destructive',
       })
     },
   })
-  
+
   const registerMutation = useMutation({
     mutationFn: authApi.register,
     onSuccess: (data) => {
-      // ✅ use data.user.token instead of data.token
       setUser(data.user, data.user.token, rememberMe)
-  
-      toast({
-        title: 'Account Created!',
-        description: `Welcome to LeadFlix, ${data.user.firstName}!`,
-        variant: 'success',
-      })
-  
+      toast({ title: 'Account Created!', description: `Welcome, ${data.user.firstName}!`, variant: 'success' })
       navigate('/dashboard')
     },
     onError: (error: any) => {
       toast({
         title: 'Registration Failed',
-        description: error.response?.data?.message || 'Please check your information and try again.',
+        description: error.response?.data?.message || 'Please check your info and try again.',
         variant: 'destructive',
       })
     },
   })
-  
-  
 
   const validateForm = (isRegister: boolean) => {
     const newErrors: Record<string, string> = {}
-
-    if (!formData.email) {
-      newErrors.email = 'Email is required'
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email'
-    }
-
-    if (!formData.password) {
-      newErrors.password = 'Password is required'
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters'
-    }
-
+    if (!formData.email) newErrors.email = 'Email is required'
+    else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = 'Invalid email'
+    if (!formData.password) newErrors.password = 'Password is required'
+    else if (formData.password.length < 6) newErrors.password = 'Min 6 characters'
     if (isRegister) {
-      if (!formData.firstName) {
-        newErrors.firstName = 'First name is required'
-      }
-      if (!formData.lastName) {
-        newErrors.lastName = 'Last name is required'
-      }
-      if (!formData.confirmPassword) {
-        newErrors.confirmPassword = 'Please confirm your password'
-      } else if (formData.password !== formData.confirmPassword) {
-        newErrors.confirmPassword = 'Passwords do not match'
-      }
+      if (!formData.firstName) newErrors.firstName = 'First name required'
+      if (!formData.lastName) newErrors.lastName = 'Last name required'
+      if (!formData.confirmPassword) newErrors.confirmPassword = 'Confirm your password'
+      else if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = 'Passwords do not match'
     }
-
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
 
   const handleSubmit = (isRegister: boolean) => {
     if (!validateForm(isRegister)) return
-
     if (isRegister) {
-      registerMutation.mutate({
-        email: formData.email,
-        password: formData.password,
-        firstName: formData.firstName!,
-        lastName: formData.lastName!,
-      })
+      registerMutation.mutate({ email: formData.email, password: formData.password, firstName: formData.firstName!, lastName: formData.lastName! })
     } else {
-      loginMutation.mutate({
-        email: formData.email,
-        password: formData.password,
-      })
+      loginMutation.mutate({ email: formData.email, password: formData.password })
     }
   }
 
   const updateField = (field: keyof FormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }))
-    }
+    if (errors[field]) setErrors(prev => ({ ...prev, [field]: '' }))
   }
+
 
   return (
     <Layout>
