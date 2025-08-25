@@ -17,23 +17,25 @@ export interface User {
   email: string
   firstName: string
   lastName: string
+  token?: string // optional token field
 }
 
 export interface AuthResponse {
   message: string
   user: User
+  token?: string // optional JWT returned separately
 }
 
 export const authApi = {
   register: (data: RegisterData): Promise<AuthResponse> =>
-    api.post('/api/auth/register', data).then(res => res.data),
-  
+    api.post('https://leadflix.onrender.com/api/auth/register', data).then(res => res.data),
+
   login: (data: LoginData): Promise<AuthResponse> =>
-    api.post('/api/auth/login', data).then(res => res.data),
-  
+    api.post('https://leadflix.onrender.com/api/auth/login', data).then(res => res.data),
+
   logout: (): Promise<{ message: string }> =>
-    api.post('/api/auth/logout').then(res => res.data),
-  
+    api.post('https://leadflix.onrender.com/api/auth/logout').then(res => res.data),
+
   me: (): Promise<{ user: User }> =>
-    api.get('/api/auth/me').then(res => res.data),
+    api.get('https://leadflix.onrender.com/api/auth/me').then(res => res.data),
 }

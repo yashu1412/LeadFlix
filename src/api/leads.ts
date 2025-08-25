@@ -21,14 +21,14 @@ export const leadsApi = {
     api.get(`/api/leads/${id}`).then(res => res.data),
   
   createLead: (data: LeadFormData): Promise<Lead> =>
-    api.post('/api/leads', data).then(res => res.data),
+    api.post('https://leadflix.onrender.com/api/leads', data).then(res => res.data),
   
   updateLead: (id: string, data: Partial<LeadFormData>): Promise<Lead> =>
-    api.put(`/api/leads/${id}`, data).then(res => res.data),
+    api.put(`https://leadflix.onrender.com/api/leads/${id}`, data).then(res => res.data),
   
   deleteLead: (id: string): Promise<{ message: string }> =>
-    api.delete(`/api/leads/${id}`).then(res => res.data),
+    api.delete(`https://leadflix.onrender.com/api/leads/${id}`).then(res => res.data),
   
   getStats: (): Promise<LeadStats> =>
-    api.get('/api/leads/stats').then(res => res.data),
+    api.get('https://leadflix.onrender.com/api/leads/stats').then(res => res.data),
 }

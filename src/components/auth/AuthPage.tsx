@@ -38,48 +38,17 @@ export function AuthPage() {
     mutationFn: authApi.login,
     onSuccess: (data) => {
       console.log('Login Success - API Response:', data)
-      console.log('Login Success - User Data:', data.user)
-      
-      // Set user in auth store
-      setUser(data.user)
-      console.log('Login Success - After setUser call')
-      
-      // Force a small delay and then check state
-      setTimeout(() => {
-        console.log('Login Success - Checking auth state after delay...')
-        const authStore = useAuthStore.getState()
-        console.log('Login Success - Current auth state:', authStore)
-        
-        // If state is still not ready, try setting it again
-        if (!authStore.isAuthenticated || !authStore.user) {
-          console.log('Login Success - State not ready, retrying setUser...')
-          setUser(data.user)
-          
-          // Wait a bit more and check again
-          setTimeout(() => {
-            const retryState = useAuthStore.getState()
-            console.log('Login Success - Retry auth state:', retryState)
-            
-            if (retryState.isAuthenticated && retryState.user) {
-              console.log('Login Success - State ready, navigating...')
-              navigate('/dashboard')
-            } else {
-              console.error('Login Success - State still not ready after retry!')
-              // Force navigation anyway
-              navigate('/dashboard')
-            }
-          }, 300)
-        } else {
-          console.log('Login Success - State ready, navigating...')
-          navigate('/dashboard')
-        }
-      }, 200)
-      
+  
+      // ✅ Save user + token + rememberMe choice
+      setUser(data.user, data.token, rememberMe)
+  
       toast({
         title: 'Welcome back!',
         description: `Successfully signed in as ${data.user.firstName}`,
         variant: 'success',
       })
+  
+      navigate('/dashboard')
     },
     onError: (error: any) => {
       console.error('Login Error:', error)
@@ -90,20 +59,20 @@ export function AuthPage() {
       })
     },
   })
-
+  
   const registerMutation = useMutation({
     mutationFn: authApi.register,
     onSuccess: (data) => {
-      setUser(data.user)
+      // ✅ Save user + token + rememberMe choice
+      setUser(data.user, data.token, rememberMe)
+  
       toast({
         title: 'Account Created!',
         description: `Welcome to LeadFlix, ${data.user.firstName}!`,
         variant: 'success',
       })
-      // Fix: Add small delay to ensure state is persisted before navigation
-      setTimeout(() => {
-        navigate('/dashboard')
-      }, 100)
+  
+      navigate('/dashboard')
     },
     onError: (error: any) => {
       toast({
@@ -113,6 +82,7 @@ export function AuthPage() {
       })
     },
   })
+  
 
   const validateForm = (isRegister: boolean) => {
     const newErrors: Record<string, string> = {}
