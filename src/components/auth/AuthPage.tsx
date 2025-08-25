@@ -152,7 +152,7 @@ const loginMutation = useMutation({
     console.log('Login Success:', data)
 
     // FIX: use data.token, not data.user.token
-    setUser(data.user, data.token, rememberMe)
+     setUser(data.user, data.user.token, rememberMe)
 
     toast({
       title: 'Welcome back!',
