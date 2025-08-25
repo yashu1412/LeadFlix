@@ -39,8 +39,8 @@ export function AuthPage() {
     onSuccess: (data) => {
       console.log('Login Success - API Response:', data)
   
-      // ✅ Save user + token + rememberMe choice
-      setUser(data.user, data.token, rememberMe)
+      // ✅ use data.user.token instead of data.token
+      setUser(data.user, data.user.token, rememberMe)
   
       toast({
         title: 'Welcome back!',
@@ -63,8 +63,8 @@ export function AuthPage() {
   const registerMutation = useMutation({
     mutationFn: authApi.register,
     onSuccess: (data) => {
-      // ✅ Save user + token + rememberMe choice
-      setUser(data.user, data.token, rememberMe)
+      // ✅ use data.user.token instead of data.token
+      setUser(data.user, data.user.token, rememberMe)
   
       toast({
         title: 'Account Created!',
@@ -82,6 +82,7 @@ export function AuthPage() {
       })
     },
   })
+  
   
 
   const validateForm = (isRegister: boolean) => {
