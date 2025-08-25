@@ -146,22 +146,32 @@ export function AuthPage() {
   const [rememberMe, setRememberMe] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  const loginMutation = useMutation({
-    mutationFn: authApi.login,
-    onSuccess: (data) => {
-      console.log('Login Success:', data)
-      setUser(data.user, data.user.token, rememberMe)
-      toast({ title: 'Welcome back!', description: `Signed in as ${data.user.firstName}`, variant: 'success' })
-      navigate('/dashboard')
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Sign In Failed',
-        description: error.response?.data?.message || 'Check your credentials and try again.',
-        variant: 'destructive',
-      })
-    },
-  })
+const loginMutation = useMutation({
+  mutationFn: authApi.login,
+  onSuccess: (data) => {
+    console.log('Login Success:', data)
+
+    // FIX: use data.token, not data.user.token
+    setUser(data.user, data.token, rememberMe)
+
+    toast({
+      title: 'Welcome back!',
+      description: `Signed in as ${data.user.firstName}`,
+      variant: 'success',
+    })
+
+    console.log("Navigating to dashboard...")
+    navigate('/dashboard')
+  },
+  onError: (error: any) => {
+    toast({
+      title: 'Sign In Failed',
+      description: error.response?.data?.message || 'Check your credentials and try again.',
+      variant: 'destructive',
+    })
+  },
+})
+
 
   const registerMutation = useMutation({
     mutationFn: authApi.register,
