@@ -17,7 +17,7 @@ interface AuthStore {
   clearUser: () => void
 }
 
-// ✅ function to select storage based on rememberMe
+// ✅ Helper: choose storage depending on rememberMe
 const storageType = (rememberMe?: boolean) =>
   createJSONStorage(() => (rememberMe ? localStorage : sessionStorage))
 
@@ -39,7 +39,7 @@ export const useAuthStore = create<AuthStore>()(
           rememberMe,
         })
 
-        // 🔑 Update storage dynamically depending on rememberMe
+        // 🔑 Switch storage dynamically
         useAuthStore.persist.setOptions({
           storage: storageType(rememberMe),
         })
@@ -51,9 +51,10 @@ export const useAuthStore = create<AuthStore>()(
 
       clearUser: () => {
         console.log('Auth Store: clearUser called')
+
         set({ user: null, token: null, isAuthenticated: false, rememberMe: false })
 
-        // Reset storage back to sessionStorage when logging out
+        // Reset to sessionStorage after logout
         useAuthStore.persist.setOptions({
           storage: storageType(false),
         })
@@ -65,13 +66,18 @@ export const useAuthStore = create<AuthStore>()(
     }),
     {
       name: 'leadflix-auth',
-      storage: storageType(false), // default: sessionStorage (until rememberMe chosen)
+      storage: storageType(false), // default to sessionStorage
       partialize: (state) =>
         state.rememberMe
-          ? { user: state.user, token: state.token, isAuthenticated: state.isAuthenticated, rememberMe: state.rememberMe }
-          : {}, // if not rememberMe, don't persist anything
+          ? {
+              user: state.user,
+              token: state.token,
+              isAuthenticated: state.isAuthenticated,
+              rememberMe: state.rememberMe,
+            }
+          : {}, // don’t persist if rememberMe = false
       onRehydrateStorage: () => (state) => {
-        console.log('Auth Store: Rehydrating from storage, state:', state)
+        console.log('Auth Store: Rehydrated from storage, state:', state)
       },
     }
   )
